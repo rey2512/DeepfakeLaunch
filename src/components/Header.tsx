@@ -14,7 +14,7 @@ export const Header = () => {
         <a href="#about" className="text-sm text-gray-600 hover:text-gray-900 hover-lift">
           About
         </a>
-        <a href="https//:prasenjeetsingh.me" className="text-sm text-gray-600 hover:text-gray-900 hover-lift">
+        <a href="http://www.prasenjeetsingh.me" className="text-sm text-gray-600 hover:text-gray-900 hover-lift">
         Creator
         </a>
       </nav>
