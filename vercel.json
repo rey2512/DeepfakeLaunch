@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "VITE_API_URL": "https://api.verifiai.tech"
+  },
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://api.verifiai.tech"
+    }
+  }
+} 

@@ -36,7 +36,15 @@ app = FastAPI(title="Deepfake Detection API")
 # Allow CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*", "https://verifiai.tech", "http://verifiai.tech", "https://www.verifiai.tech", "http://www.verifiai.tech"],  # Include production domain
+    allow_origins=[
+        "*", 
+        "https://verifiai.tech", 
+        "http://verifiai.tech", 
+        "https://www.verifiai.tech", 
+        "http://www.verifiai.tech",
+        "https://deepverify.vercel.app",
+        "http://deepverify.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

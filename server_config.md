@@ -46,6 +46,8 @@
 
 ## Frontend Deployment
 
+### Option 1: Traditional Web Server
+
 1. **Build the Frontend**:
    ```bash
    npm run build
@@ -71,6 +73,48 @@
    certbot --nginx -d verifiai.tech -d www.verifiai.tech
    ```
 
+### Option 2: Vercel Deployment
+
+1. **Install Vercel CLI**:
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Configure Environment Variables**:
+   - Create a `.env.production` file with:
+   ```
+   VITE_API_URL=https://api.verifiai.tech
+   ```
+   
+   - Create a `vercel.json` file with:
+   ```json
+   {
+     "rewrites": [
+       { "source": "/(.*)", "destination": "/index.html" }
+     ],
+     "env": {
+       "VITE_API_URL": "https://api.verifiai.tech"
+     },
+     "build": {
+       "env": {
+         "VITE_API_URL": "https://api.verifiai.tech"
+       }
+     }
+   }
+   ```
+
+3. **Deploy to Vercel**:
+   ```bash
+   vercel
+   ```
+   
+   Or connect your GitHub repository to Vercel for automatic deployments.
+
+4. **Configure Custom Domain**:
+   - In the Vercel dashboard, go to your project settings
+   - Add your custom domain (e.g., verifiai.tech)
+   - Follow Vercel's instructions to configure DNS records
+
 ## Troubleshooting
 
 1. **Check Server Logs**:
@@ -82,14 +126,25 @@
    ```bash
    curl https://api.verifiai.tech/health
    ```
+   
+   Or use the provided check_backend.js script:
+   ```bash
+   node check_backend.js https://api.verifiai.tech/health
+   ```
 
 3. **CORS Issues**:
    - Ensure the backend CORS configuration includes your frontend domain
    - Check browser console for CORS-related errors
+   - Common error: "No 'Access-Control-Allow-Origin' header is present"
 
 4. **File Permissions**:
    - Ensure the server has write permissions to the `uploads` directory:
    ```bash
    chmod -R 755 uploads
    chown -R www-data:www-data uploads
-   ``` 
+   ```
+
+5. **Vercel-specific Issues**:
+   - Check that environment variables are correctly set in Vercel dashboard
+   - Verify that the API URL is correctly being used in your code
+   - Use browser developer tools to check network requests and console errors 

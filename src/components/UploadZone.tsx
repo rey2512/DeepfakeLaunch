@@ -43,6 +43,9 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
 
   // Get API URL from environment variable or use default
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  
+  // Log the API URL for debugging
+  console.log(`Using API URL: ${API_URL}`);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
