@@ -43,6 +43,9 @@ const Index = () => {
     // Set the analysis result
     setResult(analysisResult);
     
+    // Make sure to set analyzing to false when analysis is complete
+    setAnalyzing(false);
+    
     toast({
       title: "Analysis Complete",
       description: `Result: ${analysisResult.category} (${analysisResult.score}%)`,

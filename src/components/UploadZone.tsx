@@ -73,52 +73,69 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
     const formData = new FormData();
     formData.append("file", file);
 
-    try {
-      console.log(`Sending file to ${API_URL}/predict/`);
-      
-      // Send the file to the backend for prediction
-      const response = await axios.post<AnalysisResult>(`${API_URL}/predict/`, formData, {
-        headers: { 
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: fileType === "video" ? 60000 : 30000, // Longer timeout for videos
-      });
+    // Maximum number of retry attempts
+    const maxRetries = 3;
+    let retryCount = 0;
+    let success = false;
 
-      console.log("Response received:", response.data);
-      setUploadMessage("Analysis complete!");
-      onFileSelected(file, response.data);
-    } catch (error: unknown) {
-      console.error("Error analyzing file:", error);
-      
-      // More detailed error message
-      let errorMessage = "Failed to analyze the file. Please try again.";
-      
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError<ApiErrorResponse>;
-        if (axiosError.response) {
-          // The request was made and the server responded with a status code
-          // that falls out of the range of 2xx
-          const statusCode = axiosError.response.status;
-          const errorDetail = axiosError.response.data?.detail || 'Unknown error';
+    while (retryCount < maxRetries && !success) {
+      try {
+        console.log(`Attempt ${retryCount + 1}: Sending file to ${API_URL}/predict/`);
+        
+        // Send the file to the backend for prediction
+        const response = await axios.post<AnalysisResult>(`${API_URL}/predict/`, formData, {
+          headers: { 
+            "Content-Type": "multipart/form-data",
+          },
+          timeout: 60000, // 60 second timeout
+        });
+        
+        console.log("Response received:", response.data);
+        
+        // Process successful response
+        onFileSelected(file, response.data);
+        success = true;
+      } catch (error) {
+        retryCount++;
+        console.error(`Attempt ${retryCount} failed:`, error);
+        
+        if (retryCount >= maxRetries) {
+          // All retry attempts failed
+          let errorMessage = "Failed to analyze file. Please try again.";
           
-          errorMessage = `Server error: ${statusCode} - ${errorDetail}`;
-          console.error("Response data:", axiosError.response.data);
-        } else if (axiosError.request) {
-          // The request was made but no response was received
-          errorMessage = "No response from server. Is the backend running?";
+          if (axios.isAxiosError(error)) {
+            const axiosError = error as AxiosError<ApiErrorResponse>;
+            if (axiosError.response) {
+              // The request was made and the server responded with a status code
+              // that falls out of the range of 2xx
+              console.error("Response status:", axiosError.response.status);
+              const statusCode = axiosError.response.status;
+              const errorDetail = axiosError.response.data?.detail || 'Unknown error';
+              
+              console.error("Response data:", axiosError.response.data);
+              errorMessage = `Error (${statusCode}): ${errorDetail}`;
+            } else if (axiosError.request) {
+              // The request was made but no response was received
+              console.error("No response received:", axiosError.request);
+              errorMessage = "No response from server. Please check if the backend is running and try again.";
+            } else {
+              // Something happened in setting up the request that triggered an Error
+              errorMessage = `Error: ${axiosError.message}`;
+            }
+          } else {
+            // Handle non-Axios errors
+            errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+          }
+          
+          setError(errorMessage);
+          setAnalyzing(false);
         } else {
-          // Something happened in setting up the request
-          errorMessage = `Error: ${axiosError.message}`;
+          // Wait before retrying (exponential backoff)
+          const delay = Math.pow(2, retryCount) * 1000;
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-      } else if (error instanceof Error) {
-        errorMessage = `Error: ${error.message}`;
       }
-      
-      setError(errorMessage);
-      setUploadMessage(null);
-    } finally {
-      setAnalyzing(false);
-      setFileType(null);
     }
   };
 

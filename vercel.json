@@ -1,13 +1,20 @@
 {
   "rewrites": [
+    { "source": "/api/health", "destination": "/api/health" },
+    { "source": "/api/predict", "destination": "/api/simple-fallback" },
+    { "source": "/api/(.*)", "destination": "/api/proxy" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "env": {
-    "VITE_API_URL": "https://api.verifiai.tech"
+    "VITE_API_URL": "/api",
+    "BACKEND_URL": "https://api.verifiai.tech",
+    "USE_FALLBACK": "true"
   },
   "build": {
     "env": {
-      "VITE_API_URL": "https://api.verifiai.tech"
+      "VITE_API_URL": "/api",
+      "BACKEND_URL": "https://api.verifiai.tech",
+      "USE_FALLBACK": "true"
     }
   }
 } 
