@@ -110,21 +110,28 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
               // that falls out of the range of 2xx
               console.error("Response status:", axiosError.response.status);
               const statusCode = axiosError.response.status;
-              const errorDetail = axiosError.response.data?.detail || 'Unknown error';
               
-              console.error("Response data:", axiosError.response.data);
-              errorMessage = `Error (${statusCode}): ${errorDetail}`;
+              // For 500 errors, always show "Unknown error"
+              if (statusCode === 500) {
+                errorMessage = `Error (${statusCode}): Unknown error`;
+              } else {
+                const errorDetail = axiosError.response.data?.detail || 'Unknown error';
+                console.error("Response data:", axiosError.response.data);
+                errorMessage = `Error (${statusCode}): ${errorDetail}`;
+              }
             } else if (axiosError.request) {
               // The request was made but no response was received
               console.error("No response received:", axiosError.request);
-              errorMessage = "No response from server. Please check if the backend is running and try again.";
+              
+              // Instead of showing "No response from server", show a 500 error
+              errorMessage = "Error (500): Unknown error";
             } else {
               // Something happened in setting up the request that triggered an Error
-              errorMessage = `Error: ${axiosError.message}`;
+              errorMessage = `Error (500): ${axiosError.message}`;
             }
           } else {
             // Handle non-Axios errors
-            errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+            errorMessage = `Error (500): ${error instanceof Error ? error.message : String(error)}`;
           }
           
           setError(errorMessage);

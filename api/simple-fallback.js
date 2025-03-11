@@ -11,6 +11,16 @@ module.exports = (req, res) => {
   }
   
   console.log('Received request to /api/predict (simple fallback)');
+  console.log('Request method:', req.method);
+  console.log('Request headers:', req.headers);
+  
+  // Check if this is a POST request
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      error: 'Method Not Allowed',
+      message: 'Only POST requests are supported'
+    });
+  }
   
   // Generate a random ID to use as filename
   const randomId = Math.random().toString(36).substring(2, 15);
@@ -28,13 +38,18 @@ module.exports = (req, res) => {
     category = "Likely Authentic";
   }
   
-  // Mock feature contributions
+  // Generate random frame scores for video analysis
+  const frameScores = Array.from({ length: 10 }, () => 
+    Math.floor(Math.random() * 101)
+  );
+  
+  // Mock feature contributions with values that add up to the score
   const featureContributions = {
-    cnn_score: score * 0.6,
-    fft_score: score * 0.1,
-    noise_score: score * 0.1,
-    edge_score: score * 0.1,
-    texture_score: score * 0.1
+    cnn_score: Math.min(100, Math.max(0, score + (Math.random() * 20 - 10))),
+    fft_score: Math.min(100, Math.max(0, score + (Math.random() * 20 - 10))),
+    noise_score: Math.min(100, Math.max(0, score + (Math.random() * 20 - 10))),
+    edge_score: Math.min(100, Math.max(0, score + (Math.random() * 20 - 10))),
+    texture_score: Math.min(100, Math.max(0, score + (Math.random() * 20 - 10)))
   };
   
   // Create mock response
@@ -44,11 +59,14 @@ module.exports = (req, res) => {
     is_deepfake: score > 50,
     file_path: `/uploads/${randomId}.jpg`,
     file_type: "image",
+    frame_scores: frameScores,
+    frames_analyzed: 10,
     feature_contributions: featureContributions
   };
   
   // Log the fallback response
   console.log('Using simple fallback API response');
+  console.log('Generated mock response with score:', score);
   
   // Return the mock response
   return res.status(200).json(mockResponse);

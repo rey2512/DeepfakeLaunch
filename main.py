@@ -15,7 +15,12 @@ import tempfile
 import hashlib
 
 # Create uploads directory if it doesn't exist
-os.makedirs("uploads", exist_ok=True)
+try:
+    os.makedirs("uploads", exist_ok=True)
+    print("✅ Uploads directory created or already exists")
+except Exception as e:
+    print(f"❌ Error creating uploads directory: {str(e)}")
+    print(traceback.format_exc())
 
 # Cache for consistent predictions when no model is available
 prediction_cache: Dict[str, float] = {}
@@ -28,7 +33,9 @@ try:
     os.remove(test_file_path)
     print("✅ Uploads directory has proper write permissions")
 except Exception as e:
-    print(f"⚠️ Warning: Could not write to uploads directory: {e}")
+    print(f"❌ Error: Could not write to uploads directory: {str(e)}")
+    print(traceback.format_exc())
+    print("This will cause file upload operations to fail!")
 
 # Initialize FastAPI app
 app = FastAPI(title="Deepfake Detection API")
@@ -146,22 +153,34 @@ def extract_signal_features(image: np.ndarray) -> Dict[str, float]:
     contrast = 0.0
     # Use a safer calculation method to avoid overflow
     try:
-        # Sample a subset of pixels to avoid overflow
-        step = max(1, min(gray.shape[0], gray.shape[1]) // 100)
-        for i in range(step, gray.shape[0], step):
-            for j in range(step, gray.shape[1], step):
-                # Use float32 to avoid overflow
-                diff = float(int(gray[i, j]) - int(gray[i-1, j-1]))
-                contrast += (diff * diff) / 1000.0  # Scale down to avoid overflow
-        
-        # Normalize by the number of samples
-        num_samples = (gray.shape[0] // step) * (gray.shape[1] // step)
-        if num_samples > 0:
-            contrast = contrast / num_samples
-        else:
+        # Check if image is valid
+        if gray is None or gray.size == 0 or gray.shape[0] < 2 or gray.shape[1] < 2:
+            print("Warning: Invalid image for texture analysis")
             contrast = 0.0
+        else:
+            # Sample a subset of pixels to avoid overflow
+            step = max(1, min(gray.shape[0], gray.shape[1]) // 100)
+            sample_count = 0
+            
+            for i in range(step, gray.shape[0], step):
+                for j in range(step, gray.shape[1], step):
+                    try:
+                        # Use float32 to avoid overflow
+                        diff = float(int(gray[i, j]) - int(gray[i-1, j-1]))
+                        contrast += (diff * diff) / 1000.0  # Scale down to avoid overflow
+                        sample_count += 1
+                    except IndexError:
+                        # Skip if indices are out of bounds
+                        continue
+            
+            # Normalize by the number of samples
+            if sample_count > 0:
+                contrast = contrast / sample_count
+            else:
+                contrast = 0.0
     except Exception as e:
         print(f"Warning: Error in texture analysis: {e}")
+        print(traceback.format_exc())
         contrast = 0.0
     
     features['texture_contrast'] = float(min(1.0, contrast))  # Normalize and cap
@@ -189,18 +208,34 @@ def analyze_with_hybrid_approach(image: np.ndarray) -> Tuple[float, Dict[str, fl
     
     # Always use deterministic scoring for consistent results
     # Use a placeholder score based on image hash
-    img_bytes = cv2.imencode('.jpg', image)[1].tobytes()
-    cnn_score = get_deterministic_score(img_bytes)
-    
-    # Disabled CNN model usage for consistency
-    if False and model_loaded:
-        processed_image = cv2.resize(image, (224, 224))
-        processed_image = processed_image / 255.0  # Normalize
-        processed_image = np.expand_dims(processed_image, axis=0)
-        
-        # Use the model for prediction
-        prediction = model.predict(processed_image)
-        cnn_score = float(prediction[0][0]) * 100  # Convert to percentage
+    try:
+        # Check if image is valid
+        if image is None or image.size == 0:
+            print("Warning: Invalid image for CNN scoring")
+            cnn_score = 50.0  # Use neutral score for invalid images
+        else:
+            # Try to encode the image
+            success, encoded_img = cv2.imencode('.jpg', image)
+            if success:
+                img_bytes = encoded_img.tobytes()
+                cnn_score = get_deterministic_score(img_bytes)
+            else:
+                print("Warning: Failed to encode image for CNN scoring")
+                cnn_score = 50.0  # Use neutral score if encoding fails
+                
+        # Disabled CNN model usage for consistency
+        if False and model_loaded:
+            processed_image = cv2.resize(image, (224, 224))
+            processed_image = processed_image / 255.0  # Normalize
+            processed_image = np.expand_dims(processed_image, axis=0)
+            
+            # Use the model for prediction
+            prediction = model.predict(processed_image)
+            cnn_score = float(prediction[0][0]) * 100  # Convert to percentage
+    except Exception as e:
+        print(f"Warning: Error in CNN scoring: {e}")
+        print(traceback.format_exc())
+        cnn_score = 50.0  # Use neutral score on error
     
     feature_contributions['cnn_score'] = cnn_score
     
@@ -252,11 +287,23 @@ async def upload_file(file: UploadFile = File(...)):
         file_location = f"uploads/{unique_filename}"
         
         # Read file content
-        contents = await file.read()
+        try:
+            contents = await file.read()
+        except Exception as e:
+            error_msg = f"Error reading file content: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Save the file
-        with open(file_location, "wb") as buffer:
-            buffer.write(contents)
+        try:
+            with open(file_location, "wb") as buffer:
+                buffer.write(contents)
+        except Exception as e:
+            error_msg = f"Error writing file to disk: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         print(f"✅ File uploaded successfully: {file_location}")
         return {
@@ -264,6 +311,9 @@ async def upload_file(file: UploadFile = File(...)):
             "filename": unique_filename,
             "file_path": f"/uploads/{unique_filename}"
         }
+    except HTTPException as he:
+        # Re-raise HTTP exceptions
+        raise he
     except Exception as e:
         error_msg = f"Error uploading file: {str(e)}"
         print(f"❌ {error_msg}")
@@ -290,19 +340,37 @@ async def predict(file: UploadFile = File(...)):
         file_location = f"uploads/{unique_filename}"
         
         # Read file content
-        contents = await file.read()
+        try:
+            contents = await file.read()
+        except Exception as e:
+            error_msg = f"Error reading file content: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Save the uploaded file
-        with open(file_location, "wb") as f:
-            f.write(contents)
+        try:
+            with open(file_location, "wb") as f:
+                f.write(contents)
+        except Exception as e:
+            error_msg = f"Error writing file to disk: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         print(f"✅ File saved successfully: {file_location}")
         
         # Process based on file type
-        if is_image:
-            return process_image(file_location, unique_filename, contents)
-        else:
-            return process_video(file_location, unique_filename, contents)
+        try:
+            if is_image:
+                return process_image(file_location, unique_filename, contents)
+            else:
+                return process_video(file_location, unique_filename, contents)
+        except Exception as e:
+            error_msg = f"Error processing file: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
             
     except HTTPException as he:
         # Re-raise HTTP exceptions
@@ -316,14 +384,46 @@ async def predict(file: UploadFile = File(...)):
 def process_image(file_path: str, filename: str, file_content: bytes):
     """Process an image file for deepfake detection"""
     try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            error_msg = f"File not found: {file_path}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
+            
+        # Check if file is empty
+        if os.path.getsize(file_path) == 0:
+            error_msg = "File is empty"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+            
         # Read the image
-        image = cv2.imread(file_path)
-        
-        if image is None:
-            raise HTTPException(status_code=400, detail="Invalid image format")
+        try:
+            image = cv2.imread(file_path)
+            
+            if image is None:
+                error_msg = "Invalid image format or corrupted image file"
+                print(f"❌ {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+                
+            # Check image dimensions
+            if image.shape[0] <= 0 or image.shape[1] <= 0:
+                error_msg = "Invalid image dimensions"
+                print(f"❌ {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+        except Exception as e:
+            error_msg = f"Error reading image file: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Use hybrid approach for analysis
-        score, feature_contributions = analyze_with_hybrid_approach(image)
+        try:
+            score, feature_contributions = analyze_with_hybrid_approach(image)
+        except Exception as e:
+            error_msg = f"Error analyzing image: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Determine result category
         result_category = get_result_category(score)
@@ -336,29 +436,71 @@ def process_image(file_path: str, filename: str, file_content: bytes):
             "file_type": "image",
             "feature_contributions": {k: round(v, 2) for k, v in feature_contributions.items()}
         }
+    except HTTPException as he:
+        # Re-raise HTTP exceptions
+        raise he
     except Exception as e:
-        print(f"❌ Error processing image: {str(e)}")
-        raise
+        error_msg = f"Error processing image: {str(e)}"
+        print(f"❌ {error_msg}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=error_msg)
 
 def process_video(file_path: str, filename: str, file_content: bytes):
     """Process a video file for deepfake detection"""
     try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            error_msg = f"File not found: {file_path}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
+            
+        # Check if file is empty
+        if os.path.getsize(file_path) == 0:
+            error_msg = "File is empty"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+            
         # Open the video file
-        cap = cv2.VideoCapture(file_path)
-        
-        if not cap.isOpened():
-            raise HTTPException(status_code=400, detail="Could not open video file")
+        try:
+            cap = cv2.VideoCapture(file_path)
+            
+            if not cap.isOpened():
+                error_msg = "Could not open video file - file may be corrupted or in an unsupported format"
+                print(f"❌ {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+        except Exception as e:
+            error_msg = f"Error opening video file: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Get video properties
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        
-        if frame_count == 0:
-            raise HTTPException(status_code=400, detail="Video file is empty")
+        try:
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            if frame_count == 0:
+                raise HTTPException(status_code=400, detail="Video file is empty or corrupted")
+        except HTTPException as he:
+            # Re-raise HTTP exceptions
+            cap.release()
+            raise he
+        except Exception as e:
+            cap.release()
+            error_msg = f"Error getting video properties: {str(e)}"
+            print(f"❌ {error_msg}")
+            print(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Check if we have a cached prediction for this video
-        file_hash = hashlib.md5(file_content).hexdigest()
-        if not model_loaded and file_hash in prediction_cache:
+        try:
+            file_hash = hashlib.md5(file_content).hexdigest()
+        except Exception as e:
+            print(f"⚠️ Warning: Could not calculate file hash: {str(e)}")
+            print(traceback.format_exc())
+            file_hash = None
+            
+        if not model_loaded and file_hash and file_hash in prediction_cache:
             # Use cached score for consistent results
             avg_score = prediction_cache[file_hash]
             # Generate frame scores based on the average score with small variations
@@ -372,8 +514,18 @@ def process_video(file_path: str, filename: str, file_content: bytes):
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             ret, frame = cap.read()
             if ret:
-                cv2.imwrite(thumbnail_path, frame)
-                
+                try:
+                    cv2.imwrite(thumbnail_path, frame)
+                    print(f"✅ Thumbnail saved successfully: {thumbnail_path}")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not save thumbnail: {str(e)}")
+                    print(traceback.format_exc())
+                    # Continue processing even if thumbnail generation fails
+                    thumbnail_path = None
+            else:
+                print("⚠️ Warning: Could not read frame for thumbnail")
+                thumbnail_path = None
+            
             cap.release()
             
             # Determine result category
@@ -393,7 +545,7 @@ def process_video(file_path: str, filename: str, file_content: bytes):
                 "category": result_category,
                 "is_deepfake": avg_score > 50,
                 "file_path": f"/uploads/{filename}",
-                "thumbnail_path": f"/uploads/thumbnail_{filename.split('.')[0]}.jpg",
+                "thumbnail_path": thumbnail_path if thumbnail_path else None,
                 "frame_scores": [round(score, 2) for score in frame_scores],
                 "frames_analyzed": len(frame_scores),
                 "file_type": "video",
@@ -420,21 +572,48 @@ def process_video(file_path: str, filename: str, file_content: bytes):
                 
             # Save the first frame as thumbnail
             if not thumbnail_saved:
-                cv2.imwrite(thumbnail_path, frame)
-                thumbnail_saved = True
-                
+                try:
+                    cv2.imwrite(thumbnail_path, frame)
+                    thumbnail_saved = True
+                    print(f"✅ Thumbnail saved successfully: {thumbnail_path}")
+                except Exception as e:
+                    print(f"⚠️ Warning: Could not save thumbnail: {str(e)}")
+                    print(traceback.format_exc())
+                    # Continue processing even if thumbnail generation fails
+                    thumbnail_path = None
+            
             # Process frames at intervals
             if frame_index % frame_interval == 0:
                 # Collect frame data for deterministic scoring
                 if not model_loaded:
-                    # Convert frame to bytes for hashing
-                    _, buffer = cv2.imencode('.jpg', frame)
-                    frame_data.append(buffer.tobytes())
+                    try:
+                        # Convert frame to bytes for hashing
+                        _, buffer = cv2.imencode('.jpg', frame)
+                        frame_data.append(buffer.tobytes())
+                    except Exception as e:
+                        print(f"⚠️ Warning: Could not encode frame for hashing: {str(e)}")
+                        print(traceback.format_exc())
+                        # Continue processing even if frame encoding fails
                 
                 # Analyze frame using hybrid approach
-                frame_score, frame_features = analyze_with_hybrid_approach(frame)
-                frame_scores.append(frame_score)
-                feature_contributions_list.append(frame_features)
+                try:
+                    frame_score, frame_features = analyze_with_hybrid_approach(frame)
+                    frame_scores.append(frame_score)
+                    feature_contributions_list.append(frame_features)
+                except Exception as e:
+                    print(f"⚠️ Warning: Error analyzing frame: {str(e)}")
+                    print(traceback.format_exc())
+                    # Use neutral values if frame analysis fails
+                    frame_score = 50.0
+                    frame_features = {
+                        'cnn_score': 50.0,
+                        'fft_score': 50.0,
+                        'noise_score': 50.0,
+                        'edge_score': 50.0,
+                        'texture_score': 50.0
+                    }
+                    frame_scores.append(frame_score)
+                    feature_contributions_list.append(frame_features)
                 
                 # If we've analyzed enough frames, break
                 if len(frame_scores) >= frames_to_analyze:
@@ -450,11 +629,22 @@ def process_video(file_path: str, filename: str, file_content: bytes):
             
             # Average feature contributions across frames
             avg_features = {}
-            for feature in feature_contributions_list[0].keys():
-                avg_features[feature] = sum(fc[feature] for fc in feature_contributions_list) / len(feature_contributions_list)
+            if feature_contributions_list:
+                for feature in feature_contributions_list[0].keys():
+                    avg_features[feature] = sum(fc[feature] for fc in feature_contributions_list) / len(feature_contributions_list)
+            else:
+                # Fallback if no feature contributions were collected
+                avg_features = {
+                    'cnn_score': 50,
+                    'fft_score': 50,
+                    'noise_score': 50,
+                    'edge_score': 50,
+                    'texture_score': 50
+                }
             
             # Cache the average score for future use
-            prediction_cache[file_hash] = avg_score
+            if file_hash:
+                prediction_cache[file_hash] = avg_score
         else:
             # Fallback if no frames were processed
             avg_score = 50  # Neutral score
@@ -474,7 +664,7 @@ def process_video(file_path: str, filename: str, file_content: bytes):
             "category": result_category,
             "is_deepfake": avg_score > 50,
             "file_path": f"/uploads/{filename}",
-            "thumbnail_path": f"/uploads/thumbnail_{filename.split('.')[0]}.jpg",
+            "thumbnail_path": f"/uploads/thumbnail_{filename.split('.')[0]}.jpg" if thumbnail_saved else None,
             "frame_scores": [round(score, 2) for score in frame_scores],
             "frames_analyzed": len(frame_scores),
             "file_type": "video",
