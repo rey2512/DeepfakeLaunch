@@ -14,6 +14,12 @@ export interface AnalysisResult {
     compression_artifacts?: number;
     temporal_consistency?: number;
     metadata_analysis?: number;
+    // Legacy fields for backward compatibility
+    cnn_score?: number;
+    fft_score?: number;
+    noise_score?: number;
+    edge_score?: number;
+    texture_score?: number;
   };
 }
 

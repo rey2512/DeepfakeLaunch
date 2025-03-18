@@ -8,26 +8,7 @@ import { AnalysisResult, UploadZoneProps } from "@/types";
 import API, { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-// Define a proper type for the analysis result
-interface AnalysisResult {
-  score: number;
-  category: string;
-  is_deepfake: boolean;
-  file_path: string;
-  file_type: "image" | "video";
-  thumbnail_path?: string;
-  frame_scores?: number[];
-  frames_analyzed?: number;
-  feature_contributions?: {
-    cnn_score: number;
-    fft_score: number;
-    noise_score: number;
-    edge_score: number;
-    texture_score: number;
-  };
-}
-
-// Define a type for API error response
+// Interface for API error responses
 interface ApiErrorResponse {
   detail?: string;
   [key: string]: unknown;
@@ -89,47 +70,74 @@ export const UploadZone = ({
     
     const formData = new FormData();
     formData.append('file', file);
+
+    // Progress simulation
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        // Don't go to 100% until we have a response
+        const next = prev + (Math.random() * 5);
+        return Math.min(next, 95);
+      });
+    }, 300);
     
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      try {
-        console.log(`Attempting to analyze file: ${file.name}`);
-        
-        const response = await API_ENDPOINTS.predict(formData);
-        
-        setLoading(false);
-        setIsUploading(false);
-        setUploadProgress(100);
-        
-        onFileSelected(file, response.data);
-        setFile(null);
-        
-        toast({
-          title: "Analysis Complete",
-          description: "Your file has been analyzed successfully",
-        });
-        
-        break;
-      } catch (error) {
-        console.error(`Error attempt ${retryCount + 1}:`, error);
-        retryCount++;
-        
-        if (retryCount >= maxRetries) {
-          setLoading(false);
-          setIsUploading(false);
-          setErrorMessage("Failed to analyze file after multiple attempts");
-          toast({
-            title: "Analysis Failed",
-            description: "Failed to analyze file after multiple attempts. Please try again later.",
-            variant: "destructive",
-          });
-        } else {
-          // Wait before retrying (exponential backoff)
-          await new Promise(r => setTimeout(r, 1000 * retryCount));
+    try {
+      console.log(`Sending file for analysis: ${file.name}`);
+      
+      const response = await API_ENDPOINTS.predict(formData);
+      clearInterval(progressInterval);
+      
+      console.log('Analysis response:', response.data);
+      setUploadProgress(100);
+      
+      // Map the backend response to match our frontend types if needed
+      const analysisResult: AnalysisResult = {
+        score: response.data.score,
+        category: response.data.category || (response.data.score > 80 ? "Likely Manipulated" : 
+                  response.data.score > 50 ? "Potentially Manipulated" : "Likely Authentic"),
+        is_deepfake: response.data.is_deepfake || response.data.score > 50,
+        file_type: response.data.file_type || (file.type.startsWith('image') ? 'image' : 'video'),
+        frames_analyzed: response.data.frames_analyzed || 0,
+        frame_scores: response.data.frame_scores || [],
+        thumbnail_path: response.data.thumbnail_path || "",
+        upload_path: response.data.upload_path || "",
+        timestamp: response.data.timestamp || new Date().toISOString(),
+        feature_contributions: response.data.feature_contributions || {
+          noise_analysis: response.data.feature_contributions?.noise_score || 0,
+          facial_features: response.data.feature_contributions?.cnn_score || 0,
+          compression_artifacts: response.data.feature_contributions?.fft_score || 0,
+          temporal_consistency: response.data.feature_contributions?.texture_score || 0,
+          metadata_analysis: response.data.feature_contributions?.edge_score || 0,
         }
+      };
+      
+      onFileSelected(file, analysisResult);
+      setFile(null);
+      setLoading(false);
+      setIsUploading(false);
+      
+      toast({
+        title: "Analysis Complete",
+        description: `Result: ${analysisResult.category} (${analysisResult.score.toFixed(1)}%)`,
+      });
+    } catch (error) {
+      clearInterval(progressInterval);
+      console.error('Analysis error:', error);
+      setLoading(false);
+      setIsUploading(false);
+      setUploadProgress(0);
+      
+      let errorMsg = "Failed to analyze file. Please try again.";
+      
+      if (error instanceof Error) {
+        errorMsg = `Error: ${error.message}`;
       }
+      
+      setErrorMessage(errorMsg);
+      toast({
+        title: "Analysis Failed",
+        description: errorMsg,
+        variant: "destructive",
+      });
     }
   };
   

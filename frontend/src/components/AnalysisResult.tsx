@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, Info, BarChart, Brain, Activity, Scan, Grid
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { AnalysisResult as AnalysisData } from "@/types";
 
 interface FeatureContributions {
   cnn_score: number;
@@ -19,7 +20,7 @@ interface AnalysisResultProps {
   fileType?: "image" | "video";
   frameScores?: number[];
   framesAnalyzed?: number;
-  featureContributions?: FeatureContributions;
+  featureContributions?: AnalysisData['feature_contributions'];
 }
 
 export const AnalysisResult = ({ 
@@ -58,30 +59,30 @@ export const AnalysisResult = ({
 
   // Feature icons and descriptions
   const featureInfo = {
-    cnn_score: {
-      icon: <Brain className="w-4 h-4" />,
-      name: "Deep Learning",
-      description: "Analysis from convolutional neural networks trained on deepfake datasets"
-    },
-    fft_score: {
-      icon: <Activity className="w-4 h-4" />,
-      name: "Frequency Analysis",
-      description: "Detection of inconsistencies in frequency domain that may indicate manipulation"
-    },
-    noise_score: {
-      icon: <Scan className="w-4 h-4" />,
+    noise_analysis: {
       name: "Noise Analysis",
-      description: "Evaluation of noise patterns that are often inconsistent in manipulated media"
+      icon: <Activity className="w-4 h-4" />,
+      description: "Detection of inconsistent noise patterns that indicate manipulation."
     },
-    edge_score: {
+    facial_features: {
+      name: "Facial Analysis",
+      icon: <Brain className="w-4 h-4" />,
+      description: "Analysis of facial features for signs of AI generation."
+    },
+    compression_artifacts: {
+      name: "Compression Detection",
       icon: <Grid3X3 className="w-4 h-4" />,
-      name: "Edge Consistency",
-      description: "Analysis of edge artifacts that can appear in manipulated images"
+      description: "Identification of irregular compression artifacts."
     },
-    texture_score: {
-      icon: <Layers className="w-4 h-4" />,
-      name: "Texture Analysis",
-      description: "Detection of texture inconsistencies that may indicate manipulation"
+    temporal_consistency: {
+      name: "Temporal Consistency",
+      icon: <BarChart className="w-4 h-4" />,
+      description: "Measurement of consistency between frames in videos."
+    },
+    metadata_analysis: {
+      name: "Metadata Analysis",
+      icon: <Scan className="w-4 h-4" />,
+      description: "Analysis of file metadata for inconsistencies."
     }
   };
 

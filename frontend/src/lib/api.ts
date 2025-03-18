@@ -10,7 +10,7 @@ console.log(`Site configured for: ${siteURL}`);
 // Create axios instance with configuration
 const API = axios.create({ 
   baseURL,
-  timeout: 30000, // 30 seconds timeout for longer operations like video processing
+  timeout: 60000, // 60 seconds timeout for longer operations like video processing
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -37,7 +37,17 @@ API.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('API Response Error:', error.response || error);
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('API Response Error:', error.response.status, error.response.data);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('API No Response Error:', error.request);
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('API Error:', error.message);
+    }
     return Promise.reject(error);
   }
 );
@@ -47,12 +57,16 @@ const predictEndpoint = '/api/predict';
 
 export const API_ENDPOINTS = {
   // File upload for analysis
-  predict: (formData: FormData) => API.post(predictEndpoint, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-      'Origin': siteURL
-    },
-  }),
+  predict: (formData: FormData) => {
+    return API.post(predictEndpoint, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Origin': siteURL
+      },
+      // Increase timeout for larger files
+      timeout: 120000, // 2 minutes
+    });
+  },
   
   // Health check
   health: () => API.get('/'),
