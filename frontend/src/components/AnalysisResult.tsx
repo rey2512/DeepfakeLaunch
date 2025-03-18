@@ -17,7 +17,7 @@ interface FeatureContributions {
 interface AnalysisResultProps {
   score: number;
   loading?: boolean;
-  fileType?: "image" | "video";
+  fileType?: string;
   frameScores?: number[];
   framesAnalyzed?: number;
   featureContributions?: AnalysisData['feature_contributions'];

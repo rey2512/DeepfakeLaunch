@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { UploadZone } from "@/components/UploadZone";
-import { AnalysisResult } from "@/components/AnalysisResult";
+import { AnalysisResult as AnalysisResultComponent } from "@/components/AnalysisResult";
 import { Footer } from "@/components/Footer";
 import { useToast } from "@/components/ui/use-toast";
-import { Shield, Zap, BarChart3, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { Shield, Zap, BarChart3, AlertTriangle, CheckCircle, Info, Coffee } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { AnalysisResult as AnalysisData } from "@/types";
+import { AnalysisResult } from "@/types";
 import API from "@/lib/api";
 
 interface HistoryItem {
@@ -15,21 +15,40 @@ interface HistoryItem {
     type: string;
     size: number;
   };
-  result: AnalysisData;
+  result: AnalysisResult;
   timestamp: string;
 }
 
 const Index = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisData | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const { toast } = useToast();
+  const [serverStatus, setServerStatus] = useState<'checking' | 'awake' | 'sleeping'>('checking');
+  
+  // Check API connection on component mount
+  useEffect(() => {
+    console.log("Checking API connection...");
+    const checkConnection = async () => {
+      try {
+        await API.get('/');
+        console.log("API connection successful");
+        setServerStatus('awake');
+      } catch (error) {
+        console.error("API connection failed:", error);
+        setServerStatus('sleeping');
+      }
+    };
     
-  const handleFileSelected = (file: File, analysisResult: AnalysisData) => {
+    checkConnection();
+  }, []);
+    
+  const handleFileSelected = (file: File, analysisResult: AnalysisResult) => {
     setSelectedFile(file);
     setAnalysisResult(analysisResult);
     setAnalyzing(false);
+    setServerStatus('awake');
     
     // Add to history
     const historyItem: HistoryItem = {
@@ -65,6 +84,28 @@ const Index = () => {
           </p>
         </section>
         
+        <div className="flex justify-center mb-8">
+          <ThemeToggle />
+        </div>
+        
+        {serverStatus === 'sleeping' && (
+          <div className="max-w-2xl mx-auto mb-8 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+            <div className="flex items-start gap-3">
+              <Coffee className="w-5 h-5 text-amber-500 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">Server is in sleep mode</h3>
+                <p className="text-xs text-amber-600 dark:text-amber-300 mb-2">
+                  This application uses a free hosting plan that puts the server to sleep after 15 minutes of inactivity. 
+                  When you try to analyze a file, the server will automatically wake up, but this can take up to 60 seconds.
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-300">
+                  Please be patient during the first analysis - this is normal behavior for free tier hosting.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="max-w-2xl mx-auto space-y-8">
           {!analysisResult ? (
             <UploadZone 
@@ -74,7 +115,7 @@ const Index = () => {
             />
           ) : (
             <div className="space-y-6">
-              <AnalysisResult 
+              <AnalysisResultComponent 
                 score={analysisResult.score} 
                 loading={false}
                 fileType={analysisResult.file_type}
