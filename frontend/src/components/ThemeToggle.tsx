@@ -10,7 +10,11 @@ export function ThemeToggle() {
   // useEffect only runs on the client, so now we can safely show the UI
   useEffect(() => {
     setMounted(true);
-  }, []);
+    // Ensure light mode is applied initially if no theme is set
+    if (!theme) {
+      setTheme("light");
+    }
+  }, [theme, setTheme]);
 
   if (!mounted) {
     return null;
