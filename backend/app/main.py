@@ -48,7 +48,13 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080", "*"],  # Include frontend URL explicitly
+    allow_origins=[
+        "http://localhost:8080", 
+        "http://127.0.0.1:8080", 
+        "http://localhost:5173",  # Vite dev server
+        "https://deepfakelaunch.vercel.app",  # Vercel frontend
+        "*"  # Allow all origins in development
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

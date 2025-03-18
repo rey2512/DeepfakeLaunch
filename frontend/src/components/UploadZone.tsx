@@ -41,13 +41,14 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
   const [fileType, setFileType] = useState<"image" | "video" | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
 
-  // Get API URL from environment variable or use default
-  // In development with Vite proxy, use relative URL
-  const isDevelopment = import.meta.env.DEV;
-  const API_URL = isDevelopment ? '' : (import.meta.env.VITE_API_URL || "http://localhost:8000");
+  // Determine if we're in development mode
+  const isDevelopment = import.meta.env.MODE === 'development';
+  
+  // Use the environment variable for the API URL, with a fallback
+  const API_URL = import.meta.env.VITE_API_URL || "https://deepfakelaunch.onrender.com";
   
   // Log the API URL for debugging
-  console.log(`Using API URL: ${API_URL || '[relative URL with proxy]'}`);
+  console.log(`Using API URL: ${API_URL}`);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {

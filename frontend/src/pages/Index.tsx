@@ -32,8 +32,8 @@ const Index = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   
-  // Get API URL from environment variable or use default
-  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  // Use the environment variable for the API URL, with a fallback
+  const API_URL = import.meta.env.VITE_API_URL || "https://deepfakelaunch.onrender.com";
 
   const handleFileSelected = (file: File, analysisResult: AnalysisData) => {
     // Clear any previous errors
