@@ -1,9 +1,0 @@
-fastapi>=0.95.0,<0.100.0
-uvicorn>=0.20.0,<0.24.0
-python-multipart>=0.0.5
-numpy>=1.22.0
-opencv-python>=4.7.0
-pillow>=9.0.0
-pydantic>=1.10.0,<2.0.0
-starlette>=0.25.0
-aiofiles>=0.8.0 
