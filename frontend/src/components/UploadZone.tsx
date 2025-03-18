@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, Image as ImageIcon, FileVideo } from "lucide-react";
+import { Upload, Image as ImageIcon, FileVideo, Loader2 } from "lucide-react";
 import axios, { AxiosError } from "axios";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,7 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileType, setFileType] = useState<"image" | "video" | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Get API URL from environment variable or use default
   // In development with Vite proxy, use relative URL
@@ -69,6 +70,7 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
   const processFile = async (file: File) => {
     setAnalyzing(true);
     setError(null);
+    setUploadProgress(0);
     setUploadMessage(`Processing your ${fileType} with our hybrid detection system...`);
     
     const formData = new FormData();
@@ -83,6 +85,15 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
       try {
         console.log(`Attempt ${retryCount + 1}: Sending file to ${API_URL}/api/predict/`);
         
+        // Simulate upload progress - this is for UX only since we can't accurately track actual progress
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            // Don't go to 100% until we have a response
+            const next = prev + (Math.random() * 5);
+            return Math.min(next, 95);
+          });
+        }, 300);
+        
         // Send the file to the backend for prediction
         const response = await axios.post<AnalysisResult>(`${API_URL}/api/predict/`, formData, {
           headers: { 
@@ -90,6 +101,10 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
           },
           timeout: 60000, // 60 second timeout
         });
+        
+        // Clear the progress interval
+        clearInterval(progressInterval);
+        setUploadProgress(100);
         
         console.log("Response received:", response.data);
         
@@ -175,19 +190,21 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
         className={cn(
           "glass-card p-12 rounded-xl cursor-pointer transition-all duration-300",
           "border-2 border-dashed border-gray-200 hover:border-gray-300",
+          "dark:border-gray-700 dark:hover:border-gray-600",
+          "dark:bg-gray-800/30 dark:backdrop-blur-lg",
           "flex flex-col items-center justify-center gap-4",
-          isDragging && "border-gray-400 bg-gray-50/50",
+          isDragging && "border-gray-400 bg-gray-50/50 dark:border-gray-500 dark:bg-gray-700/30",
           "animate-in"
         )}
       >
         <input {...getInputProps()} />
-        <div className="p-4 rounded-full bg-gray-50 text-gray-500">
+        <div className="p-4 rounded-full bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
           <Upload className="w-8 h-8" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-semibold mb-2">Drop your file here</h3>
-          <p className="text-sm text-gray-500 mb-4">or click to select a file</p>
-          <div className="flex justify-center gap-4 text-sm text-gray-400">
+          <h3 className="text-lg font-semibold mb-2 dark:text-gray-100">Drop your file here</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">or click to select a file</p>
+          <div className="flex justify-center gap-4 text-sm text-gray-400 dark:text-gray-500">
             <span className="flex items-center gap-1">
               <ImageIcon className="w-4 h-4" /> Images
             </span>
@@ -195,16 +212,37 @@ export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) =>
               <FileVideo className="w-4 h-4" /> Videos
             </span>
           </div>
-          <p className="text-xs text-gray-400 mt-2">Max file size: 100MB</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Max file size: 100MB</p>
         </div>
       </div>
 
       {uploadMessage && (
-        <p className="text-center mt-4 text-gray-600">{uploadMessage}</p>
+        <div className="mt-6 text-center">
+          {uploadProgress > 0 && (
+            <div className="mb-3">
+              <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
+                <span>Uploading...</span>
+                <span>{Math.round(uploadProgress)}%</span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-300">
+            {uploadProgress < 100 && (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+            )}
+            <p>{uploadMessage}</p>
+          </div>
+        </div>
       )}
       
       {error && (
-        <p className="text-center mt-4 text-red-500">{error}</p>
+        <p className="text-center mt-4 text-red-500 dark:text-red-400">{error}</p>
       )}
     </div>
   );

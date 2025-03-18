@@ -9,12 +9,12 @@ export const Footer = () => {
   };
 
   return (
-    <footer className="bg-gradient-to-r from-gray-800 to-gray-900 text-white py-12 mt-16">
+    <footer className="bg-gradient-to-r from-gray-800 to-gray-900 text-white py-12 mt-16 transition-colors">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           <div>
             <h3 className="text-xl font-bold mb-4 flex items-center">
-              <Sparkles className="w-5 h-5 mr-2" /> 
+              <Sparkles className="w-5 h-5 mr-2 text-blue-300" /> 
               <span 
                 className="cursor-pointer hover:text-blue-300 transition-colors"
                 onClick={handleVerifiAIClick}
@@ -46,7 +46,7 @@ export const Footer = () => {
           
           <div>
             <h3 className="text-xl font-bold mb-4 flex items-center">
-              <FileCode className="w-5 h-5 mr-2" /> 
+              <FileCode className="w-5 h-5 mr-2 text-green-300" /> 
               Resources
             </h3>
             <ul className="space-y-2 text-gray-300">
@@ -67,7 +67,7 @@ export const Footer = () => {
           
           <div>
             <h3 className="text-xl font-bold mb-4 flex items-center">
-              <AlertTriangle className="w-5 h-5 mr-2" /> 
+              <AlertTriangle className="w-5 h-5 mr-2 text-yellow-300" /> 
               Disclaimer
             </h3>
             <p className="text-gray-300 text-sm">
