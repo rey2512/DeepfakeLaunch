@@ -2,6 +2,10 @@ import axios from 'axios';
 
 // Get the API URL from environment variables
 const baseURL = import.meta.env.VITE_API_URL || "https://deepfakelaunch.onrender.com";
+const siteURL = import.meta.env.VITE_SITE_URL || "https://verifiai.tech";
+
+console.log(`API configured for: ${baseURL}`);
+console.log(`Site configured for: ${siteURL}`);
 
 // Create axios instance with configuration
 const API = axios.create({ 
@@ -10,6 +14,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'Origin': siteURL
   }
 });
 
@@ -45,6 +50,7 @@ export const API_ENDPOINTS = {
   predict: (formData: FormData) => API.post(predictEndpoint, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+      'Origin': siteURL
     },
   }),
   

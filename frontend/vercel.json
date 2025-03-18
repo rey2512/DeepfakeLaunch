@@ -4,7 +4,8 @@
   ],
   "build": {
     "env": {
-      "VITE_API_URL": ""
+      "VITE_API_URL": "https://deepfakelaunch.onrender.com",
+      "VITE_SITE_URL": "https://verifiai.tech"
     }
   }
 } 

@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 import logging
 import sys
+import uvicorn
 from app.routers import prediction
 
 # Configure logging
@@ -52,7 +53,9 @@ app.add_middleware(
         "http://localhost:8080", 
         "http://127.0.0.1:8080", 
         "http://localhost:5173",  # Vite dev server
-        "https://deepfakelaunch.vercel.app",  # Vercel frontend
+        "https://deepverify.vercel.app",  # Vercel frontend
+        "https://verifiai.tech",  # Production domain
+        "https://www.verifiai.tech",  # Production domain with www
         "*"  # Allow all origins in development
     ],
     allow_credentials=True,
@@ -85,4 +88,18 @@ app.include_router(prediction.router, prefix="/api")
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Deepfake Detection API"} 
+    return {"message": "Welcome to the Deepfake Detection API"}
+
+# Run the app if this file is executed directly
+if __name__ == "__main__":
+    # Get port from environment variable or use default
+    port = int(os.environ.get("PORT", 8000))
+    
+    # Run the app with uvicorn
+    uvicorn.run(
+        "app.main:app", 
+        host="0.0.0.0", 
+        port=port,
+        reload=True
+    )
+    logger.info(f"Application running on http://0.0.0.0:{port}") 
