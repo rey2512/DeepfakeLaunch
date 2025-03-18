@@ -1,0 +1,55 @@
+import axios from 'axios';
+
+// Get the API URL from environment variables
+const baseURL = import.meta.env.VITE_API_URL || "https://deepfakelaunch.onrender.com";
+
+// Create axios instance with configuration
+const API = axios.create({ 
+  baseURL,
+  timeout: 30000, // 30 seconds timeout for longer operations like video processing
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
+});
+
+// Request interceptor for logging
+API.interceptors.request.use(
+  (config) => {
+    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+    return config;
+  },
+  (error) => {
+    console.error('API Request Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor for logging
+API.interceptors.response.use(
+  (response) => {
+    console.log(`API Response: ${response.status} ${response.statusText}`);
+    return response;
+  },
+  (error) => {
+    console.error('API Response Error:', error.response || error);
+    return Promise.reject(error);
+  }
+);
+
+// API endpoint functions
+const predictEndpoint = '/api/predict';
+
+export const API_ENDPOINTS = {
+  // File upload for analysis
+  predict: (formData: FormData) => API.post(predictEndpoint, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  
+  // Health check
+  health: () => API.get('/'),
+};
+
+export default API; 

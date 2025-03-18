@@ -1,7 +1,11 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, Image as ImageIcon, FileVideo, Loader2 } from "lucide-react";
-import axios, { AxiosError } from "axios";
+import { FileCog, Upload, AlertTriangle, FileVideo, FileImage } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { AnalysisResult, UploadZoneProps } from "@/types";
+import API, { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // Define a proper type for the analysis result
@@ -29,221 +33,219 @@ interface ApiErrorResponse {
   [key: string]: unknown;
 }
 
-interface UploadZoneProps {
-  onFileSelected: (file: File, result: AnalysisResult) => void;
-  setAnalyzing: (analyzing: boolean) => void;
-}
-
-export const UploadZone = ({ onFileSelected, setAnalyzing }: UploadZoneProps) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [fileType, setFileType] = useState<"image" | "video" | null>(null);
+export const UploadZone = ({
+  onFileSelected,
+  loading,
+  setLoading,
+}: UploadZoneProps) => {
+  const { toast } = useToast();
+  const [file, setFile] = useState<File | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
-
-  // Determine if we're in development mode
-  const isDevelopment = import.meta.env.MODE === 'development';
-  
-  // Use the environment variable for the API URL, with a fallback
-  const API_URL = import.meta.env.VITE_API_URL || "https://deepfakelaunch.onrender.com";
   
   // Log the API URL for debugging
-  console.log(`Using API URL: ${API_URL}`);
+  console.log(`Using API URL: ${API.defaults.baseURL}`);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      
-      // Determine file type
-      if (file.type.startsWith("image/")) {
-        setFileType("image");
-      } else if (file.type.startsWith("video/")) {
-        setFileType("video");
-      } else {
-        setError("Unsupported file type. Please upload an image or video file.");
-        return;
-      }
-      
-      processFile(file);
+    if (acceptedFiles.length === 0) {
+      return;
     }
-  }, []);
-
-  const processFile = async (file: File) => {
-    setAnalyzing(true);
-    setError(null);
+    
+    const selectedFile = acceptedFiles[0];
+    
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/jpg', 'video/mp4', 'video/quicktime'].includes(selectedFile.type)) {
+      setErrorMessage("Please upload a JPEG, PNG, or MP4 file");
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a JPEG, PNG, or MP4 file",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate file size (50MB limit)
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setErrorMessage("File size exceeds the 50MB limit");
+      toast({
+        title: "File too large",
+        description: "File size exceeds the 50MB limit",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setFile(selectedFile);
+    setErrorMessage("");
+  }, [toast]);
+  
+  const handleAnalysis = async () => {
+    if (!file) return;
+    
+    setLoading(true);
+    setIsUploading(true);
     setUploadProgress(0);
-    setUploadMessage(`Processing your ${fileType} with our hybrid detection system...`);
     
     const formData = new FormData();
-    formData.append("file", file);
-
-    // Maximum number of retry attempts
-    const maxRetries = 3;
+    formData.append('file', file);
+    
     let retryCount = 0;
-    let success = false;
-
-    while (retryCount < maxRetries && !success) {
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
       try {
-        console.log(`Attempt ${retryCount + 1}: Sending file to ${API_URL}/api/predict/`);
+        console.log(`Attempting to analyze file: ${file.name}`);
         
-        // Simulate upload progress - this is for UX only since we can't accurately track actual progress
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => {
-            // Don't go to 100% until we have a response
-            const next = prev + (Math.random() * 5);
-            return Math.min(next, 95);
-          });
-        }, 300);
+        const response = await API_ENDPOINTS.predict(formData);
         
-        // Send the file to the backend for prediction
-        const response = await axios.post<AnalysisResult>(`${API_URL}/api/predict/`, formData, {
-          headers: { 
-            "Content-Type": "multipart/form-data",
-          },
-          timeout: 60000, // 60 second timeout
-        });
-        
-        // Clear the progress interval
-        clearInterval(progressInterval);
+        setLoading(false);
+        setIsUploading(false);
         setUploadProgress(100);
         
-        console.log("Response received:", response.data);
-        
-        // Make sure the response has all required fields
-        if (!response.data || 
-            typeof response.data.score !== 'number' || 
-            !response.data.category || 
-            typeof response.data.is_deepfake !== 'boolean') {
-          throw new Error("Invalid response format from server");
-        }
-        
-        // Process successful response
         onFileSelected(file, response.data);
-        success = true;
+        setFile(null);
+        
+        toast({
+          title: "Analysis Complete",
+          description: "Your file has been analyzed successfully",
+        });
+        
+        break;
       } catch (error) {
+        console.error(`Error attempt ${retryCount + 1}:`, error);
         retryCount++;
-        console.error(`Attempt ${retryCount} failed:`, error);
         
         if (retryCount >= maxRetries) {
-          // All retry attempts failed
-          let errorMessage = "Failed to analyze file. Please try again.";
-          
-          if (axios.isAxiosError(error)) {
-            const axiosError = error as AxiosError<ApiErrorResponse>;
-            if (axiosError.response) {
-              // The request was made and the server responded with a status code
-              // that falls out of the range of 2xx
-              console.error("Response status:", axiosError.response.status);
-              const statusCode = axiosError.response.status;
-              
-              // For 500 errors, always show "Unknown error"
-              if (statusCode === 500) {
-                errorMessage = `Error (${statusCode}): Unknown error`;
-              } else {
-                const errorDetail = axiosError.response.data?.detail || 'Unknown error';
-                console.error("Response data:", axiosError.response.data);
-                errorMessage = `Error (${statusCode}): ${errorDetail}`;
-              }
-            } else if (axiosError.request) {
-              // The request was made but no response was received
-              console.error("No response received:", axiosError.request);
-              
-              // Instead of showing "No response from server", show a 500 error
-              errorMessage = "Error (500): Unknown error";
-            } else {
-              // Something happened in setting up the request that triggered an Error
-              errorMessage = `Error (500): ${axiosError.message}`;
-            }
-          } else {
-            // Handle non-Axios errors
-            errorMessage = `Error (500): ${error instanceof Error ? error.message : String(error)}`;
-          }
-          
-          setError(errorMessage);
-          setAnalyzing(false);
+          setLoading(false);
+          setIsUploading(false);
+          setErrorMessage("Failed to analyze file after multiple attempts");
+          toast({
+            title: "Analysis Failed",
+            description: "Failed to analyze file after multiple attempts. Please try again later.",
+            variant: "destructive",
+          });
         } else {
           // Wait before retrying (exponential backoff)
-          const delay = Math.pow(2, retryCount) * 1000;
-          console.log(`Retrying in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(r => setTimeout(r, 1000 * retryCount));
         }
       }
     }
   };
-
-  const { getRootProps, getInputProps } = useDropzone({
+  
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      "image/*": [".jpeg", ".jpg", ".png"],
-      "video/*": [".mp4", ".mov", ".avi"],
+      'image/jpeg': [],
+      'image/png': [],
+      'image/jpg': [],
+      'video/mp4': [],
+      'video/quicktime': [],
     },
-    multiple: false,
-    onDragEnter: () => setIsDragging(true),
-    onDragLeave: () => setIsDragging(false),
-    onDropAccepted: () => setIsDragging(false),
-    maxSize: 100 * 1024 * 1024, // 100MB max file size
+    disabled: loading,
+    maxFiles: 1,
   });
-
+  
   return (
-    <div>
-      <div
-        {...getRootProps()}
+    <div className="w-full max-w-md mx-auto">
+      <div 
+        {...getRootProps()} 
         className={cn(
-          "glass-card p-12 rounded-xl cursor-pointer transition-all duration-300",
-          "border-2 border-dashed border-gray-200 hover:border-gray-300",
-          "dark:border-gray-700 dark:hover:border-gray-600",
+          "border-2 border-dashed border-gray-300 dark:border-gray-600", 
+          "rounded-xl p-6 transition-all duration-300 cursor-pointer",
           "dark:bg-gray-800/30 dark:backdrop-blur-lg",
           "flex flex-col items-center justify-center gap-4",
-          isDragging && "border-gray-400 bg-gray-50/50 dark:border-gray-500 dark:bg-gray-700/30",
+          isDragActive && "border-gray-400 bg-gray-50/50 dark:border-gray-500 dark:bg-gray-700/30",
           "animate-in"
         )}
       >
         <input {...getInputProps()} />
-        <div className="p-4 rounded-full bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-          <Upload className="w-8 h-8" />
-        </div>
+        
         <div className="text-center">
-          <h3 className="text-lg font-semibold mb-2 dark:text-gray-100">Drop your file here</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">or click to select a file</p>
-          <div className="flex justify-center gap-4 text-sm text-gray-400 dark:text-gray-500">
-            <span className="flex items-center gap-1">
-              <ImageIcon className="w-4 h-4" /> Images
-            </span>
-            <span className="flex items-center gap-1">
-              <FileVideo className="w-4 h-4" /> Videos
-            </span>
+          <div className="flex flex-col items-center">
+            <div className="mb-4 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+              <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-lg font-medium mb-2 dark:text-gray-100">
+              Drag & drop your file here
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              or click to select a file for analysis
+            </p>
+            
+            <div className="flex justify-center gap-4 text-sm text-gray-400 dark:text-gray-500">
+              <span className="flex items-center gap-1">
+                <FileImage className="w-4 h-4" /> Images
+              </span>
+              <span className="flex items-center gap-1">
+                <FileVideo className="w-4 h-4" /> Videos
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Max file size: 50MB</p>
           </div>
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Max file size: 100MB</p>
         </div>
       </div>
 
-      {uploadMessage && (
-        <div className="mt-6 text-center">
-          {uploadProgress > 0 && (
-            <div className="mb-3">
-              <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300 ease-out"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 flex justify-between">
-                <span>Uploading...</span>
-                <span>{Math.round(uploadProgress)}%</span>
-              </div>
+      {file && (
+        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="flex items-center gap-3">
+            {file.type.startsWith('image/') ? (
+              <FileImage className="w-5 h-5 text-blue-500" />
+            ) : (
+              <FileVideo className="w-5 h-5 text-blue-500" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate dark:text-gray-200">{file.name}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {(file.size / (1024 * 1024)).toFixed(2)} MB
+              </p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setFile(null)}
+              disabled={loading}
+            >
+              Remove
+            </Button>
+          </div>
+          
+          {isUploading && (
+            <div className="mt-4">
+              <Progress value={uploadProgress} className="h-2" />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
+                {Math.round(uploadProgress)}%
+              </p>
             </div>
           )}
-          <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-300">
-            {uploadProgress < 100 && (
-              <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
-            )}
-            <p>{uploadMessage}</p>
+          
+          <div className="mt-4 flex justify-end">
+            <Button 
+              onClick={handleAnalysis}
+              disabled={loading}
+              className="gap-2"
+            >
+              {loading ? (
+                <>
+                  <FileCog className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <FileCog className="w-4 h-4" />
+                  Analyze File
+                </>
+              )}
+            </Button>
           </div>
         </div>
       )}
       
-      {error && (
-        <p className="text-center mt-4 text-red-500 dark:text-red-400">{error}</p>
+      {errorMessage && (
+        <p className="text-center mt-4 text-red-500 dark:text-red-400">
+          <AlertTriangle className="w-4 h-4 inline-block mr-1" />
+          {errorMessage}
+        </p>
       )}
     </div>
   );
