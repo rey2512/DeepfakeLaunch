@@ -84,10 +84,6 @@ const Index = () => {
           </p>
         </section>
         
-        <div className="flex justify-center mb-8">
-          <ThemeToggle />
-        </div>
-        
         {serverStatus === 'sleeping' && (
           <div className="max-w-2xl mx-auto mb-8 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
             <div className="flex items-start gap-3">

@@ -4,9 +4,11 @@ services:
     name: deepfake-detection-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: bash start.sh
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: PORT
-        value: 10000 
+        value: 10000
+      - key: WORKERS
+        value: 4 
