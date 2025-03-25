@@ -1,10 +1,9 @@
-# VerifiAI - Frontend Application
-
+# VerifiAI - Deepfake Detection System
 A web application for detecting manipulated media content with a modern, responsive UI.
 
 ## Features
 
-- Upload images for analysis
+- Upload images/video for analysis
 - Visual results with confidence scores
 - Modern, responsive UI
 
@@ -46,6 +45,7 @@ A web application for detecting manipulated media content with a modern, respons
 - **Frontend**: React, TypeScript, Tailwind CSS
 - **UI Components**: Shadcn UI
 - **State Management**: React Query
+- **Backend**: Tensorflow, openCV, Flask API
 
 ## License
 
