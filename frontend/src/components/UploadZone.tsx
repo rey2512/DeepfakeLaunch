@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { FileCog, Upload, AlertTriangle, FileVideo, FileImage, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { AnalysisResult, UploadZoneProps } from "@/types";
 import API, { API_ENDPOINTS } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { deepfakeDetector } from "@/lib/deepfake-detector";
 
 export const UploadZone = ({
   onFileSelected,
@@ -21,6 +22,9 @@ export const UploadZone = ({
   const [retrying, setRetrying] = useState<boolean>(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [animationFrame, setAnimationFrame] = useState<number>(0);
+  const [analysisStage, setAnalysisStage] = useState<string>("Preparing");
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Create and clean up preview URL when file changes
   useEffect(() => {
@@ -41,12 +45,42 @@ export const UploadZone = ({
   useEffect(() => {
     if (!loading) return;
     
-    const interval = setInterval(() => {
+    const stageSequence = [
+      "Analyzing noise patterns",
+      "Checking facial features",
+      "Examining compression artifacts",
+      "Verifying temporal consistency",
+      "Analyzing metadata",
+      "Calculating final score"
+    ];
+    
+    const stageInterval = setInterval(() => {
+      setAnalysisStage(prev => {
+        const currentIndex = stageSequence.indexOf(prev);
+        const nextIndex = (currentIndex + 1) % stageSequence.length;
+        return stageSequence[nextIndex];
+      });
+    }, 2000);
+    
+    const dotInterval = setInterval(() => {
       setAnimationFrame(prev => (prev + 1) % 8);
     }, 250);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(stageInterval);
+      clearInterval(dotInterval);
+      setAnalysisStage("Preparing");
+    };
   }, [loading]);
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) {
@@ -88,50 +122,50 @@ export const UploadZone = ({
     setIsUploading(true);
     setUploadProgress(0);
     setRetrying(false);
+    setAnalysisStage("Preparing");
     
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Progress simulation
-    const progressInterval = setInterval(() => {
-      setUploadProgress(prev => {
-        // Don't go to 100% until we have a response
-        const next = prev + (Math.random() * 5);
-        return Math.min(next, 95);
-      });
-    }, 300);
+    // Create a new AbortController
+    abortControllerRef.current = new AbortController();
+    const { signal } = abortControllerRef.current;
     
     try {
-      const response = await API_ENDPOINTS.predict(formData);
-      clearInterval(progressInterval);
+      // Progress simulation with more realistic pace
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 20) return prev + (Math.random() * 3);
+          if (prev < 50) return prev + (Math.random() * 2);
+          if (prev < 80) return prev + (Math.random() * 1);
+          return Math.min(prev + 0.5, 95); // Slow down as we approach 95%
+        });
+      }, 300);
       
-      setUploadProgress(100);
+      // Read the file as ArrayBuffer
+      const arrayBuffer = await readFileAsArrayBuffer(file);
       
-      // Safety check - make sure we have a score
-      if (typeof response.data.score !== 'number') {
-        throw new Error("Invalid response format: missing score");
+      if (signal.aborted) {
+        clearInterval(progressInterval);
+        return;
       }
       
-      // Map the backend response to match our frontend types
-      const analysisResult: AnalysisResult = {
-        score: response.data.score,
-        category: response.data.category || (response.data.score > 80 ? "Likely Manipulated" : 
-                  response.data.score > 50 ? "Potentially Manipulated" : "Likely Authentic"),
-        is_deepfake: response.data.is_deepfake || response.data.score > 50,
-        file_type: response.data.file_type || (file.type.startsWith('image') ? 'image' : 'video'),
-        frames_analyzed: response.data.frames_analyzed || 0,
-        frame_scores: response.data.frame_scores || [],
-        thumbnail_path: response.data.thumbnail_path || "",
-        upload_path: response.data.upload_path || "",
-        timestamp: response.data.timestamp || new Date().toISOString(),
-        feature_contributions: {
-          noise_analysis: response.data.feature_contributions?.noise_analysis || response.data.feature_contributions?.noise_score || 0,
-          facial_features: response.data.feature_contributions?.facial_features || response.data.feature_contributions?.cnn_score || 0,
-          compression_artifacts: response.data.feature_contributions?.compression_artifacts || response.data.feature_contributions?.fft_score || 0,
-          temporal_consistency: response.data.feature_contributions?.temporal_consistency || response.data.feature_contributions?.texture_score || 0,
-          metadata_analysis: response.data.feature_contributions?.metadata_analysis || response.data.feature_contributions?.edge_score || 0,
-        }
-      };
+      setUploadProgress(60);
+      setAnalysisStage("Analyzing noise patterns");
+      
+      // Analyze the file using our detector
+      const analysisResult = await deepfakeDetector.analyze(arrayBuffer, file.type);
+      
+      if (signal.aborted) {
+        clearInterval(progressInterval);
+        return;
+      }
+      
+      setUploadProgress(90);
+      setAnalysisStage("Finalizing results");
+      
+      // Allow time for the user to see the analysis animations
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       
       onFileSelected(file, analysisResult);
       setFile(null);
@@ -143,25 +177,57 @@ export const UploadZone = ({
         description: `Result: ${analysisResult.category} (${analysisResult.score.toFixed(1)}%)`,
       });
     } catch (error) {
-      clearInterval(progressInterval);
-      console.error('Analysis error:', error);
-      setLoading(false);
-      setIsUploading(false);
-      setUploadProgress(0);
-      
-      let errorMsg = "Failed to analyze file. Please try again.";
-      
-      if (error instanceof Error) {
-        errorMsg = `Error: ${error.message}`;
+      // Only process error if not aborted
+      if (!signal.aborted) {
+        console.error('Analysis error:', error);
+        setLoading(false);
+        setIsUploading(false);
+        setUploadProgress(0);
+        
+        let errorMsg = "Failed to analyze file. Please try again.";
+        
+        if (error instanceof Error) {
+          errorMsg = `Error: ${error.message}`;
+        }
+        
+        setErrorMessage(errorMsg);
+        toast({
+          title: "Analysis Failed",
+          description: errorMsg,
+          variant: "destructive",
+        });
       }
-      
-      setErrorMessage(errorMsg);
-      toast({
-        title: "Analysis Failed",
-        description: errorMsg,
-        variant: "destructive",
-      });
     }
+  };
+  
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        if (event.target?.result instanceof ArrayBuffer) {
+          resolve(event.target.result);
+        } else {
+          reject(new Error("Failed to read file as ArrayBuffer"));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error("FileReader error"));
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const cancelAnalysis = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    setLoading(false);
+    setIsUploading(false);
+    setUploadProgress(0);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -250,99 +316,106 @@ export const UploadZone = ({
               size="sm" 
               onClick={() => setFile(null)}
               disabled={loading}
-              className="shrink-0"
             >
-              Remove
+              Change
             </Button>
           </div>
           
-          {/* File preview */}
-          <div className="my-4 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-700/50 relative aspect-video flex items-center justify-center">
+          {/* File Preview */}
+          <div className="relative mb-4 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700 aspect-video">
             {previewUrl && file.type.startsWith('image/') && (
               <img 
                 src={previewUrl} 
                 alt="Preview" 
-                className={cn(
-                  "w-full h-full object-contain",
-                  loading && "opacity-50 blur-sm transition-all duration-300"
-                )}
-              />
-            )}
-            {previewUrl && file.type.startsWith('video/') && (
-              <video 
-                src={previewUrl} 
-                controls={!loading}
-                muted
-                className={cn(
-                  "w-full h-full object-contain",
-                  loading && "opacity-50 blur-sm transition-all duration-300"
-                )}
+                className="object-contain w-full h-full"
               />
             )}
             
-            {/* Analysis animation overlay */}
+            {previewUrl && file.type.startsWith('video/') && (
+              <video 
+                ref={videoRef}
+                src={previewUrl} 
+                controls={!loading}
+                className="object-contain w-full h-full"
+                muted
+                controlsList="nodownload"
+              />
+            )}
+            
+            {/* Analysis overlay */}
             {loading && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 z-10">
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center">
                 <div className="relative w-20 h-20 mb-2">
-                  <div className="w-full h-full rounded-full border-4 border-blue-200/30 border-t-blue-500 animate-spin"></div>
-                  <FileCog className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-blue-400" />
+                  <div className="absolute inset-0 animate-spin-slow">
+                    <div className="w-4 h-4 bg-blue-500 rounded-full absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <FileCog className="w-10 h-10 text-white" />
+                  </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-white font-medium">{animationDots[animationFrame]}</p>
-                  <p className="text-xs text-blue-200 mt-1">AI processing your {file.type.startsWith('image/') ? 'image' : 'video'}</p>
-                </div>
+                <p className="text-white font-medium">{animationDots[animationFrame]}</p>
+                <p className="text-blue-300 text-sm mt-2">{analysisStage}</p>
               </div>
             )}
           </div>
           
-          {isUploading && (
-            <div className="mt-4">
-              <Progress value={uploadProgress} className="h-2" />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
-                {Math.round(uploadProgress)}%
-              </p>
+          {errorMessage && (
+            <div className="rounded-lg p-3 bg-red-100 dark:bg-red-900/30 mb-4 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-800 dark:text-red-300">{errorMessage}</p>
             </div>
           )}
           
-          <div className="mt-4 flex justify-end gap-2">
-            {retrying && (
+          {isUploading && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                <span>Uploading & analyzing</span>
+                <span>{uploadProgress.toFixed(0)}%</span>
+              </div>
+              <Progress value={uploadProgress} className="h-2" />
+            </div>
+          )}
+          
+          <div className="flex justify-center gap-3">
+            {!loading ? (
               <Button 
                 onClick={handleAnalysis}
-                disabled={loading}
-                variant="outline"
-                className="gap-2"
+                className="w-full flex items-center gap-2"
+                disabled={errorMessage !== ""}
               >
-                <RefreshCw className="w-4 h-4" />
-                Try Again
+                <FileCog className="w-4 h-4" />
+                Analyze File
+              </Button>
+            ) : (
+              <Button 
+                variant="outline"
+                onClick={cancelAnalysis}
+                className="w-full flex items-center gap-2 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 dark:text-red-400 dark:hover:text-red-300 dark:border-red-900 dark:hover:border-red-800"
+              >
+                Cancel Analysis
               </Button>
             )}
-            
-            <Button 
-              onClick={handleAnalysis}
-              disabled={loading}
-              className="gap-2"
-            >
-              {loading ? (
-                <>
-                  <FileCog className="w-4 h-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <FileCog className="w-4 h-4" />
-                  Analyze File
-                </>
-              )}
-            </Button>
           </div>
+          
+          {errorMessage && (
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setErrorMessage("");
+                  setRetrying(true);
+                  handleAnalysis();
+                }}
+                disabled={loading || retrying}
+                className="flex items-center gap-1 text-xs"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Try Again
+              </Button>
+            </div>
+          )}
         </div>
-      )}
-      
-      {errorMessage && (
-        <p className="text-center mt-4 text-red-500 dark:text-red-400">
-          <AlertTriangle className="w-4 h-4 inline-block mr-1" />
-          {errorMessage}
-        </p>
       )}
     </div>
   );
