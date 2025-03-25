@@ -25,6 +25,7 @@ export const UploadZone = ({
   const [analysisStage, setAnalysisStage] = useState<string>("Preparing");
   const abortControllerRef = useRef<AbortController | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const speechSynthesisRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Create and clean up preview URL when file changes
   useEffect(() => {
@@ -79,8 +80,59 @@ export const UploadZone = ({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      
+      // Cancel any ongoing speech
+      if (speechSynthesisRef.current && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
+
+  // Make the voices available on load (needed for some browsers)
+  useEffect(() => {
+    if ('speechSynthesis' in window) {
+      // Load voices
+      window.speechSynthesis.getVoices();
+      
+      // Some browsers need this event to properly load voices
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
+
+  // Speech synthesis function
+  const speakMessage = (message: string) => {
+    if ('speechSynthesis' in window) {
+      // Cancel any previous speech
+      window.speechSynthesis.cancel();
+      
+      // Create a new utterance with robotic settings
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.rate = 1.0; // Normal speech rate
+      utterance.pitch = 0.3; // Very low pitch for robotic effect
+      utterance.volume = 1.0;
+      
+      // Try to find the most robotic-sounding voice
+      const voices = window.speechSynthesis.getVoices();
+      const roboticVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('zira') ||
+        voice.name.toLowerCase().includes('microsoft') || 
+        voice.name.toLowerCase().includes('google') ||
+        voice.name.toLowerCase().includes('daniel')
+      );
+      
+      if (roboticVoice) {
+        utterance.voice = roboticVoice;
+      }
+      
+      // Store reference for potential cancellation
+      speechSynthesisRef.current = utterance;
+      
+      // Speak the message
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) {
@@ -114,7 +166,7 @@ export const UploadZone = ({
     setFile(selectedFile);
     setErrorMessage("");
   }, [toast]);
-
+  
   const handleAnalysis = async () => {
     if (!file) return;
     
@@ -123,6 +175,9 @@ export const UploadZone = ({
     setUploadProgress(0);
     setRetrying(false);
     setAnalysisStage("Preparing");
+    
+    // Speak the analysis message - only this message and more robotic
+    speakMessage("Our System is detecting your file");
     
     // Create a new AbortController
     abortControllerRef.current = new AbortController();
@@ -146,7 +201,7 @@ export const UploadZone = ({
         clearInterval(progressInterval);
         return;
       }
-      
+    
       setUploadProgress(60);
       setAnalysisStage("Analyzing noise patterns");
       
@@ -191,6 +246,7 @@ export const UploadZone = ({
         }
         
         setErrorMessage(errorMsg);
+        
         toast({
           title: "Analysis Failed",
           description: errorMsg,
@@ -225,11 +281,16 @@ export const UploadZone = ({
       abortControllerRef.current.abort();
     }
     
+    // Cancel any ongoing speech
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    
     setLoading(false);
     setIsUploading(false);
     setUploadProgress(0);
   };
-
+  
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
@@ -258,43 +319,43 @@ export const UploadZone = ({
   return (
     <div className="w-full max-w-md mx-auto">
       {!file && (
-        <div 
-          {...getRootProps()} 
-          className={cn(
-            "border-2 border-dashed border-gray-300 dark:border-gray-600", 
-            "rounded-xl p-6 transition-all duration-300 cursor-pointer",
-            "dark:bg-gray-800/30 dark:backdrop-blur-lg",
-            "flex flex-col items-center justify-center gap-4",
-            isDragActive && "border-gray-400 bg-gray-50/50 dark:border-gray-500 dark:bg-gray-700/30",
-            "animate-in"
-          )}
-        >
-          <input {...getInputProps()} />
-          
-          <div className="text-center">
-            <div className="flex flex-col items-center">
-              <div className="mb-4 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h3 className="text-lg font-medium mb-2 dark:text-gray-100">
-                Drag & drop your file here
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                or click to select a file for analysis
-              </p>
-              
-              <div className="flex justify-center gap-4 text-sm text-gray-400 dark:text-gray-500">
-                <span className="flex items-center gap-1">
-                  <FileImage className="w-4 h-4" /> Images
-                </span>
-                <span className="flex items-center gap-1">
-                  <FileVideo className="w-4 h-4" /> Videos
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Max file size: 50MB</p>
+      <div 
+        {...getRootProps()} 
+        className={cn(
+          "border-2 border-dashed border-gray-300 dark:border-gray-600", 
+          "rounded-xl p-6 transition-all duration-300 cursor-pointer",
+          "dark:bg-gray-800/30 dark:backdrop-blur-lg",
+          "flex flex-col items-center justify-center gap-4",
+          isDragActive && "border-gray-400 bg-gray-50/50 dark:border-gray-500 dark:bg-gray-700/30",
+          "animate-in"
+        )}
+      >
+        <input {...getInputProps()} />
+        
+        <div className="text-center">
+          <div className="flex flex-col items-center">
+            <div className="mb-4 p-4 bg-blue-100 dark:bg-blue-900/30 rounded-full">
+              <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             </div>
+            <h3 className="text-lg font-medium mb-2 dark:text-gray-100">
+              Drag & drop your file here
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              or click to select a file for analysis
+            </p>
+            
+            <div className="flex justify-center gap-4 text-sm text-gray-400 dark:text-gray-500">
+              <span className="flex items-center gap-1">
+                <FileImage className="w-4 h-4" /> Images
+              </span>
+              <span className="flex items-center gap-1">
+                <FileVideo className="w-4 h-4" /> Videos
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Max file size: 50MB</p>
           </div>
         </div>
+      </div>
       )}
 
       {file && (
@@ -396,10 +457,10 @@ export const UploadZone = ({
               </Button>
             )}
           </div>
-          
+            
           {errorMessage && (
             <div className="mt-4 flex justify-center">
-              <Button
+            <Button 
                 variant="outline"
                 size="sm"
                 onClick={() => {
@@ -412,8 +473,8 @@ export const UploadZone = ({
               >
                 <RefreshCw className="w-3 h-3" />
                 Try Again
-              </Button>
-            </div>
+            </Button>
+          </div>
           )}
         </div>
       )}
