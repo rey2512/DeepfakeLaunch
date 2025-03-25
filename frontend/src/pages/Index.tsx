@@ -197,13 +197,13 @@ const Index = () => {
                   </p>
                 </div>
                 
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-800">
+                <div className="p-4" style={{ background: 'rgba(214, 137, 16, 0.1)', borderColor: 'rgba(214, 137, 16, 0.3)' }}>
                   <div className="flex items-center mb-2">
-                    <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
-                    <h4 className="font-medium dark:text-gray-100">Potentially Manipulated (50-80%)</h4>
+                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: '#D68910' }}></div>
+                    <h4 className="font-medium dark:text-gray-100">Authentic but Noise (50-80%)</h4>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Content shows some signs of manipulation and should be treated with caution.
+                    Content is authentic but contains normal background noise and processing artifacts.
                   </p>
                 </div>
                 

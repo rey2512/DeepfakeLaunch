@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { AnalysisResult as AnalysisData } from "@/types";
+import { deepfakeDetector } from "@/lib/deepfake-detector";
 
 interface FeatureContributions {
   cnn_score: number;
@@ -43,16 +44,25 @@ export const AnalysisResult = ({
   }, []);
 
   const getStatusColor = (score: number, isDark = false) => {
-    if (score >= 80) return isDark ? "rgb(248, 113, 113)" : "rgb(220, 38, 38)"; // Red for likely fake
-    if (score >= 60) return isDark ? "rgb(250, 204, 21)" : "rgb(234, 179, 8)"; // Yellow for uncertain
-    if (score >= 40) return isDark ? "rgb(96, 165, 250)" : "rgb(59, 130, 246)"; // Blue for somewhat uncertain
-    return isDark ? "rgb(34, 197, 94)" : "rgb(22, 163, 74)"; // Green for likely real
+    const category = getStatusText(score);
+    const categoryColor = deepfakeDetector.getCategoryColor(category);
+    
+    // Convert hex to RGB with light/dark variants
+    if (category === "Likely Manipulated") {
+      return isDark ? "rgb(248, 113, 113)" : "rgb(220, 38, 38)";
+    } else if (category === "Authentic but Noise") {
+      return isDark ? "rgb(214, 137, 16)" : "rgb(230, 152, 25)";
+    } else if (category === "Authentic with Some Inconsistencies") {
+      return isDark ? "rgb(13, 71, 161)" : categoryColor;
+    } else {
+      return isDark ? "rgb(34, 197, 94)" : "rgb(22, 163, 74)";
+    }
   };
 
   const getStatusText = (score: number) => {
     if (score >= 80) return "Likely Manipulated";
-    if (score >= 60) return "Potentially Manipulated";
-    if (score >= 40) return "Uncertain";
+    if (score >= 60) return "Authentic but Noise";
+    if (score >= 40) return "Authentic with Some Inconsistencies";
     return "Likely Authentic";
   };
 
@@ -109,24 +119,24 @@ export const AnalysisResult = ({
       };
     } else if (score >= 60) {
       return {
-        title: "Moderate Evidence of Manipulation",
+        title: "Authentic Content with Background Noise",
         points: [
-          "Some anomalies detected in visual patterns",
-          featureContributions && featureContributions.noise_analysis > 60 ? "Unusual noise distribution in parts of the content" : "Partial inconsistencies in content structure",
-          "Some statistical markers of digital alteration",
-          "Moderate confidence in manipulation detection",
-          "Further verification with alternate methods recommended"
+          "Content appears authentic with some noise patterns",
+          "Normal background noise from camera sensors or compression",
+          "Some variance in quality consistent with standard media",
+          "No significant manipulations detected",
+          "Minor digital processing consistent with standard photography/video"
         ]
       };
     } else if (score >= 40) {
       return {
-        title: "Inconclusive Analysis",
+        title: "Authentic with Minor Inconsistencies",
         points: [
-          "Mixed signals from different detection methods",
-          "Some anomalies present but not conclusive",
-          "Potential legitimate editing vs. deepfake indistinguishable",
-          "Analysis limited by file quality or resolution",
-          "Results fall within margin of error - cannot determine authenticity"
+          "Mostly authentic content with some minor anomalies",
+          "Natural patterns with isolated inconsistencies",
+          "Minor processing or editing detected but not manipulation",
+          "Common legitimate post-processing present",
+          "Content likely authentic despite some technical inconsistencies"
         ]
       };
     } else {
@@ -169,9 +179,9 @@ export const AnalysisResult = ({
             {score >= 80 ? (
               <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
             ) : score >= 60 ? (
-              <Info className="w-5 h-5 text-yellow-500 dark:text-yellow-400" />
+              <Info className="w-5 h-5 text-amber-600 dark:text-amber-500" />
             ) : score >= 40 ? (
-              <Shield className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+              <Shield className="w-5 h-5 text-blue-900 dark:text-blue-700" />
             ) : (
               <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
             )}
@@ -332,31 +342,31 @@ export const AnalysisResult = ({
               ) : score >= 60 ? (
                 <>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    Moderate indicators of potential manipulation
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#D68910" }}></div>
+                    Authentic but contains normal background noise
                   </li>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    Some suspicious patterns detected but not conclusive
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#D68910" }}></div>
+                    Content shows some signs of normal processing
                   </li>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-yellow-500"></div>
-                    Further verification with alternate methods recommended
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#D68910" }}></div>
+                    Should be treated as authentic with minor variations
                   </li>
                 </>
               ) : score >= 40 ? (
                 <>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    Analysis results are inconclusive
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#0d47a1" }}></div>
+                    Authentic with some technical inconsistencies
                   </li>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    Some anomalies detected but within normal range
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#0d47a1" }}></div>
+                    Minor anomalies detected within acceptable range
                   </li>
                   <li className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    Cannot confidently determine authenticity
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#0d47a1" }}></div>
+                    Content is likely authentic despite some artifacts
                   </li>
                 </>
               ) : (
