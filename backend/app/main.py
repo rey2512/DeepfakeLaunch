@@ -55,7 +55,8 @@ app.add_middleware(
         "http://localhost:5173",  # Vite dev server
         "https://deepverify.vercel.app",  # Vercel frontend
         "https://verifiai.tech",  # Production domain
-        "https://www.verifiai.tech",  # Production domain with www
+        "https://www.verifiai.tech"
+        "http://verifiai.tech",  # Production domain with www
         "*"  # Allow all origins in development
     ],
     allow_credentials=True,
@@ -63,7 +64,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add middleware to log all requests and responses
+# Add middleware to log all requests and responsesq                                                                     
 @app.middleware("http")
 async def log_requests(request, call_next):
     logger.info(f"Request: {request.method} {request.url}")

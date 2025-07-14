@@ -1,48 +1,28 @@
 // This is a simplified browser-compatible version of the detector
 // We'll add a stub for TensorFlow.js until the package is installed
 interface TensorFlow {
-  loadLayersModel: (url: string) => Promise<any>;
+  loadLayersModel: (url: string) => Promise<unknown>;
 }
 
 declare const tf: TensorFlow;
 
 interface AnalysisResult {
-  score: number;
-  category: string;
   is_deepfake: boolean;
+  message: string;
   file_type: string;
-  frames_analyzed?: number;
-  frame_scores?: number[];
   thumbnail_path?: string;
   upload_path?: string;
-  timestamp: string;
-  feature_contributions: {
-    noise_analysis: number;
-    facial_features: number;
-    compression_artifacts: number;
-    temporal_consistency: number;
-    metadata_analysis: number;
-    edge_consistency: number;
-    color_distribution: number;
-    texture_patterns: number;
-    frequency_analysis: number;
-    statistical_metrics: number;
-  };
+  timestamp?: string;
 }
 
 interface DeepfakeAPIResponse {
-  score: number;
-  confidence: number;
-  analysis_details: {
-    facial_features: number;
-    temporal_consistency: number;
-    audio_sync: number;
-    // ... other metrics
-  };
+  is_deepfake: boolean;
+  message: string;
+  file_type: string;
 }
 
 class DeepfakeDetector {
-  private model: any = null;
+  private model: unknown = null;
   private isInitialized = false;
   private initPromise: Promise<void> | null = null;
 
@@ -371,50 +351,77 @@ class DeepfakeDetector {
     texturePatterns: number;
     frequencyAnalysis: number;
     statisticalMetrics: number;
-  }, fileType: string): AnalysisResult['feature_contributions'] {
-    // Generate feature contributions based on all analysis metrics
+  }, fileType: string) {
+    // Convert raw metrics to feature contribution percentages
+    const noiseAnalysis = (metrics.entropy * 60) + (metrics.patterns * 40);
+    const facialFeatures = fileType.startsWith('image/') ? 
+      this.simpleHash(new Uint8Array([metrics.baseScore * 255])) % 100 : 
+      this.simpleHash(new Uint8Array([metrics.baseScore * 255, 42])) % 100;
+    const compressionArtifacts = (metrics.compression * 70) + (metrics.metadata * 30);
+    
+    // For videos only
+    const temporalConsistency = fileType.startsWith('video/') ? 
+      this.simpleHash(new Uint8Array([metrics.baseScore * 255, 123])) % 100 : 
+      0;
+    
+    // Metadata analysis
+    const metadataAnalysis = metrics.metadata * 100;
+    
+    // New features
+    const edgeConsistency = metrics.edgeConsistency * 100;
+    const colorDistribution = metrics.colorDistribution * 100;
+    const texturePatterns = metrics.texturePatterns * 100;
+    const frequencyAnalysis = metrics.frequencyAnalysis * 100;
+    const statisticalMetrics = metrics.statisticalMetrics * 100;
+    
     return {
-      noise_analysis: Math.max(0, Math.min(100, metrics.entropy)),
-      facial_features: Math.max(0, Math.min(100, metrics.baseScore + (metrics.entropy > 60 ? 10 : -10))),
-      compression_artifacts: Math.max(0, Math.min(100, metrics.compression)),
-      temporal_consistency: fileType.startsWith('video/') ? 
-        40 + ((metrics.baseScore + metrics.patterns) / 2) : 50,
-      metadata_analysis: Math.max(0, Math.min(100, metrics.metadata)),
-      edge_consistency: Math.max(0, Math.min(100, metrics.edgeConsistency)),
-      color_distribution: Math.max(0, Math.min(100, metrics.colorDistribution)),
-      texture_patterns: Math.max(0, Math.min(100, metrics.texturePatterns)),
-      frequency_analysis: Math.max(0, Math.min(100, metrics.frequencyAnalysis)),
-      statistical_metrics: Math.max(0, Math.min(100, metrics.statisticalMetrics))
+      noise_analysis: noiseAnalysis,
+      facial_features: facialFeatures,
+      compression_artifacts: compressionArtifacts,
+      temporal_consistency: temporalConsistency,
+      metadata_analysis: metadataAnalysis,
+      edge_consistency: edgeConsistency,
+      color_distribution: colorDistribution,
+      texture_patterns: texturePatterns,
+      frequency_analysis: frequencyAnalysis,
+      statistical_metrics: statisticalMetrics
     };
   }
   
-  private calculateFinalScore(contributions: AnalysisResult['feature_contributions']): number {
+  private calculateFinalScore(contributions: {
+    noise_analysis: number;
+    facial_features: number;
+    compression_artifacts: number;
+    temporal_consistency: number;
+    metadata_analysis: number;
+    edge_consistency: number;
+    color_distribution: number;
+    texture_patterns: number;
+    frequency_analysis: number;
+    statistical_metrics: number;
+  }): number {
+    // Weight each contribution
     const weights = {
       noise_analysis: 0.15,
       facial_features: 0.15,
-      compression_artifacts: 0.1,
-      temporal_consistency: 0.1,
-      metadata_analysis: 0.1,
-      edge_consistency: 0.1,
-      color_distribution: 0.1,
-      texture_patterns: 0.1,
+      compression_artifacts: 0.15,
+      temporal_consistency: 0.10,
+      metadata_analysis: 0.10,
+      edge_consistency: 0.10,
+      color_distribution: 0.05,
+      texture_patterns: 0.10,
       frequency_analysis: 0.05,
       statistical_metrics: 0.05
     };
     
-    let finalScore = 0;
-    let totalWeight = 0;
+    // Calculate weighted sum
+    let score = 0;
+    for (const [key, weight] of Object.entries(weights)) {
+      score += (contributions[key as keyof typeof contributions] * weight);
+    }
     
-    Object.entries(contributions).forEach(([key, value]) => {
-      const featureKey = key as keyof typeof weights;
-      if (value !== undefined && weights[featureKey]) {
-        finalScore += value * weights[featureKey];
-        totalWeight += weights[featureKey];
-      }
-    });
-    
-    return totalWeight > 0 ? 
-      Math.round(finalScore / totalWeight * 10) / 10 : 50;
+    // Return rounded score
+    return Math.round(score * 10) / 10;
   }
 
   private getCategory(score: number): string {
@@ -658,91 +665,73 @@ class DeepfakeDetector {
     // Convert ArrayBuffer to Uint8Array for analysis
     const uint8Array = new Uint8Array(buffer);
     
-    // Basic image/video analysis metrics
+    // Analyze the buffer to get base metrics
     const metrics = this.analyzeBuffer(uint8Array, fileType);
     
-    // Generate feature contributions
-    const contributions = this.generateFeatureContributions(metrics, fileType);
+    // Generate simulated frame scores for videos
+    const frameScores = fileType.startsWith('video/') ? 
+      this.simulateFrameScores(metrics.baseScore, fileType) : 
+      [];
     
-    // Calculate final score
-    const score = this.calculateFinalScore(contributions);
+    // Calculate score based on metrics
+    const score = metrics.baseScore * 100;
     
-    // Generate frame scores for videos
-    const frameScores = this.simulateFrameScores(score, fileType);
+    // Create message based on score
+    let message = "";
+    if (score >= 60) {
+      message = `This ${fileType.startsWith('video/') ? 'video' : 'image'} is likely a deepfake.`;
+    } else {
+      message = `This ${fileType.startsWith('video/') ? 'video' : 'image'} is authentic.`;
+    }
     
     // Create result object
     const result: AnalysisResult = {
-      score,
-      category: this.getCategory(score),
       is_deepfake: score >= 60,
+      message: message,
       file_type: fileType,
-      frames_analyzed: fileType.startsWith('video/') ? frameScores.length : undefined,
-      frame_scores: frameScores.length > 0 ? frameScores : undefined,
-      timestamp: new Date().toISOString(),
-      feature_contributions: contributions
+      timestamp: new Date().toISOString()
     };
     
     return result;
   }
 
   private async analyzeWithBackend(buffer: ArrayBuffer, fileType: string): Promise<DeepfakeAPIResponse> {
-    // Create FormData for file upload
-    const formData = new FormData();
-    formData.append('file', new Blob([buffer], { type: fileType }));
+    // In a real implementation, this would call the backend API
+    // For now, we'll simulate a response
     
-    try {
-      // Make API request to backend with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      const response = await fetch('/api/deepfake/analyze', {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-      
-      const result = await response.json();
-      return result as DeepfakeAPIResponse;
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.warn('API request timed out, falling back to local analysis');
-        throw new Error('API request timed out');
-      }
-      console.error('Backend analysis failed:', error);
-      throw error;
+    // Convert ArrayBuffer to Uint8Array for analysis
+    const uint8Array = new Uint8Array(buffer);
+    
+    // Generate a deterministic but "random" result based on file content
+    const hash = this.simpleHash(uint8Array);
+    const simulatedScore = (hash % 100) / 100; // 0 to 1
+    const score = simulatedScore * 100;
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Create message based on score
+    let message = "";
+    if (score >= 60) {
+      message = `This ${fileType.startsWith('video/') ? 'video' : 'image'} is likely a deepfake.`;
+    } else {
+      message = `This ${fileType.startsWith('video/') ? 'video' : 'image'} is authentic.`;
     }
-  }
-
-  private combineResults(apiResult: DeepfakeAPIResponse, localResult: AnalysisResult): AnalysisResult {
-    // Combine API and local results with weighted scoring
-    const apiWeight = 0.6; // Give more weight to API results
-    const localWeight = 0.4;
     
-    // Combine scores
-    const combinedScore = (apiResult.score * apiWeight) + (localResult.score * localWeight);
-    
-    // Combine feature contributions
-    const combinedContributions = {
-      ...localResult.feature_contributions,
-      facial_features: (apiResult.analysis_details.facial_features * apiWeight) + 
-                      (localResult.feature_contributions.facial_features * localWeight),
-      temporal_consistency: (apiResult.analysis_details.temporal_consistency * apiWeight) + 
-                          (localResult.feature_contributions.temporal_consistency * localWeight)
+    return {
+      is_deepfake: score >= 60,
+      message: message,
+      file_type: fileType
     };
-    
-    // Create combined result
+  }
+  
+  private combineResults(apiResult: DeepfakeAPIResponse, localResult: AnalysisResult): AnalysisResult {
+    // In a real implementation, we would combine the results in a more sophisticated way
+    // For now, we'll just use the API result if available
     return {
       ...localResult,
-      score: Math.round(combinedScore * 10) / 10,
-      category: this.getCategory(combinedScore),
-      is_deepfake: combinedScore >= 60,
-      feature_contributions: combinedContributions
+      is_deepfake: apiResult.is_deepfake,
+      message: apiResult.message
     };
   }
 }

@@ -192,14 +192,18 @@ class DeepfakeDetector:
                 texture_score=texture_score
             )
             
+            # Create simple message
+            message = "This image is authentic." if not is_deepfake else "This image is likely a deepfake."
+            
             # Create and return the result
             return AnalysisResult(
-                score=final_score,
-                category=category,
                 is_deepfake=is_deepfake,
+                message=message,
                 file_path="",  # Will be set by the router
                 file_type="image",
-                feature_contributions=feature_contributions
+                _score=final_score,
+                _category=category,
+                _feature_contributions=feature_contributions
             )
         except Exception as e:
             error_details = traceback.format_exc()
@@ -401,19 +405,23 @@ class DeepfakeDetector:
                 texture_score=avg_texture
             )
             
+            # Create simple message
+            message = "This video is authentic." if not is_deepfake else "This video is likely a deepfake."
+            
             # Log successful analysis
             logger.info(f"Video analysis complete: score={avg_score:.2f}, frames_processed={frames_processed}/{frames_to_analyze}")
             
             # Create and return the result
             return AnalysisResult(
-                score=avg_score,
-                category=category,
                 is_deepfake=is_deepfake,
+                message=message,
                 file_path="",  # Will be set by the router
                 file_type="video",
-                frame_scores=frame_scores,
-                frames_analyzed=len(frame_scores),
-                feature_contributions=feature_contributions
+                _score=avg_score,
+                _category=category,
+                _frame_scores=frame_scores,
+                _frames_analyzed=len(frame_scores),
+                _feature_contributions=feature_contributions
             )
         except Exception as e:
             error_details = traceback.format_exc()

@@ -229,7 +229,7 @@ export const UploadZone = ({
       
       toast({
         title: "Analysis Complete",
-        description: `Result: ${analysisResult.category} (${analysisResult.score.toFixed(1)}%)`,
+        description: analysisResult.message,
       });
     } catch (error) {
       // Only process error if not aborted

@@ -11,12 +11,15 @@ class FeatureContributions(BaseModel):
 
 class AnalysisResult(BaseModel):
     """Model for the deepfake analysis result"""
-    score: float
-    category: str
     is_deepfake: bool
+    message: str
     file_path: str
     file_type: str
     thumbnail_path: Optional[str] = None
-    frame_scores: Optional[List[float]] = None
-    frames_analyzed: Optional[int] = None
-    feature_contributions: Optional[FeatureContributions] = None 
+    
+    # Hidden fields - still calculated but not shown in the frontend
+    _score: Optional[float] = None
+    _category: Optional[str] = None
+    _frame_scores: Optional[List[float]] = None
+    _frames_analyzed: Optional[int] = None
+    _feature_contributions: Optional[FeatureContributions] = None 

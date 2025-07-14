@@ -112,12 +112,10 @@ const Index = () => {
           ) : (
             <div className="space-y-6">
               <AnalysisResultComponent 
-                score={analysisResult.score} 
+                is_deepfake={analysisResult.is_deepfake} 
+                message={analysisResult.message}
                 loading={false}
                 fileType={analysisResult.file_type}
-                frameScores={analysisResult.frame_scores || []}
-                framesAnalyzed={analysisResult.frames_analyzed || 0}
-                featureContributions={analysisResult.feature_contributions}
               />
               <div className="flex justify-center">
                 <button 
