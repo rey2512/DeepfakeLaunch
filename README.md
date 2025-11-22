@@ -1,4 +1,4 @@
-# VerifiAI - Deepfake Detection System
+MAJOR # VerifiAI - Deepfake Detection System
 A web application for detecting manipulated media content with a modern, responsive UI.
 
 ## Features
