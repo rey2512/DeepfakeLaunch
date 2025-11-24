@@ -1,4 +1,4 @@
-# Deepfake Detection Backend
+# Deepfake Detection Backend.
 
 This is the backend API for the Deepfake Detection system. It provides endpoints for uploading and analyzing images and videos for deepfake detection.
 
